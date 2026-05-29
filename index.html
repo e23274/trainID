@@ -1,51 +1,4 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>文湖線列車動態監控儀表板</title>
-    <style>
-        :root {
-            --brn-main: #9E652E;      
-            --bg-main: #f4f6f9;        
-            --card-bg: #ffffff;       
-            --text-main: #2c3e50;     
-            --green-dir: #2e7d32;     
-            --red-dir: #c62828;       
-        }
-
-        body {
-            font-family: "Helvetica Neue", Helvetica, "PingFang TC", "Microsoft JhengHei", sans-serif;
-            background-color: var(--bg-main);
-            margin: 0;
-            padding: 0;
-            color: var(--text-main);
-        }
-
-        .dashboard-header {
-            background-color: white;
-            padding: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            text-align: center;
-            border-bottom: 3px solid var(--brn-main);
-        }
-        .dashboard-header h1 {
-            margin: 0 0 10px 0;
-            color: var(--brn-main);
-            font-size: 1.8rem;
-            letter-spacing: 1px;
-        }
-
-        .status-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 20px;
-            font-size: 0.9rem;
-            color: #7f8c8d;
-            margin-bottom: 10px;
-        }
-        .timer-bar-container {
+timer-bar-container {
             width: 200px;
             height: 6px;
             background-color: #dee2e6;
@@ -161,27 +114,25 @@
         .no-data { text-align: center; color: #aaa; padding: 30px 0; font-style: italic; }
         
         .error-msg {
-            color: #2c3e50;
-            background: #fff3cd;
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid #ffeeba;
+            color: #e66767;
+            background: #fff0f0;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #ffcccc;
             margin: 15px auto 0 auto;
-            max-width: 850px;
-            font-size: 0.95rem;
+            max-width: 750px;
+            font-size: 0.9rem;
             display: none;
-            text-align: left;
-            line-height: 1.6;
+            text-align: center;
         }
-        .guide-box { margin-top: 10px; background: white; padding: 10px; border-radius: 4px; border: 1px dashed #aaa; }
     </style>
 </head>
 <body>
 
     <div class="dashboard-header">
-        <h1>🚊 文湖線列車動態監控儀表板 (官網爬蟲版)</h1>
+        <h1>🚊 文湖線列車動態監控儀表板 (一分鐘即時版)</h1>
         <div class="status-container">
-            <span id="updateTime">正在對捷運官網發動網頁爬蟲...</span>
+            <span id="updateTime">正在連線至 Google 轉接站...</span>
             <span>|</span>
             <div>
                 <span>下次自動更新：</span>
@@ -206,7 +157,7 @@
                 <span class="train-count" id="countExhibition">0 班</span>
             </div>
             <div class="train-list" id="listExhibition">
-                <div class="no-data">等待爬蟲回傳...</div>
+                <div class="no-data">資料載入中...</div>
             </div>
         </div>
 
@@ -216,15 +167,16 @@
                 <span class="train-count" id="countZoo">0 班</span>
             </div>
             <div class="train-list" id="listZoo">
-                <div class="no-data">等待爬蟲回傳...</div>
+                <div class="no-data">資料載入中...</div>
             </div>
         </div>
     </div>
 
     <script>
+        // 🚨 這裡！請把引號內換成你剛剛在 Apps Script 部署得到的「/exec」網址！
         const targetApi = "https://script.google.com/macros/s/AKfycbwsoJuaj_Ux4ioP0Z9uEpLbESjhTNoXLNyakeWrcJe1R1lfxoJsPZIuz6rDYZL8XwRx/exec"; 
 
-        const REFRESH_INTERVAL = 60; // 🎯 降級為 1 分鐘更新一次
+        const REFRESH_INTERVAL = 60; // 🎯 設定為 60 秒（1分鐘）自動抓取一次
         let countdown = REFRESH_INTERVAL;
         let timerInterval = null;
         let cachedTrainData = []; 
@@ -256,52 +208,36 @@
             const errorConsole = document.getElementById('errorConsole');
             errorConsole.style.display = "none"; 
 
+            if(targetApi.includes("請在此處貼上")) {
+                handleError("您忘記在 index.html 第 155 行貼上您的 Google Apps Script Web App 網址了！");
+                return;
+            }
+
             try {
                 const response = await fetch(targetApi);
-                if (!response.ok) throw new Error(`HTTP 錯誤: ${response.status}`);
+                if (!response.ok) throw new Error(`HTTP 錯誤! 狀態碼: ${response.status}`);
                 
                 const resData = await response.json();
                 
-                if (resData.error) {
-                    if (resData.isShell) {
-                        showShellGuide(resData.error);
-                        timeStatus.innerHTML = "⚠️ 抵達官網，但資料被藏起來了";
-                        return;
-                    }
-                    throw new Error(resData.error);
-                }
-
                 cachedTrainData = resData.data || [];
                 renderTrainDashboard(cachedTrainData);
 
                 const now = new Date();
-                timeStatus.innerHTML = `✅ 官網資料爬取成功: ${now.toLocaleTimeString()}`;
+                timeStatus.innerHTML = `✅ 轉接成功: ${now.toLocaleTimeString()}`;
                 startCountdown();
 
             } catch (error) {
                 console.error(error);
-                timeStatus.innerHTML = "<span style='color:#e66767;'>❌ 轉接站連線失敗</span>";
-                errorConsole.style.display = "block";
-                errorConsole.innerHTML = `<b>系統提示：</b>${error.message}`;
+                handleError(error.message);
             }
         }
 
-        function showShellGuide(errMsg) {
+        function handleError(msg) {
+            const timeStatus = document.getElementById('updateTime');
             const errorConsole = document.getElementById('errorConsole');
+            timeStatus.innerHTML = "<span style='color:#e66767;'>❌ 轉接失敗</span>";
             errorConsole.style.display = "block";
-            errorConsole.innerHTML = `
-                <b>⚠️ 爬蟲觸網提示：</b><br>${errMsg.replace('\n', '<br>')}
-                <div class="guide-box">
-                    <b>🕵️‍♂️ 30秒找出「隱藏資料傳輸線 (API)」教學：</b><br>
-                    1. 用電腦瀏覽器打開你給的 <a href="https://www.metro.taipei/cp.aspx?n=59D50DF212B82F6A&Create=1&s=380A51678612648A&ccms_cs=1&state=F5D336F102ACBC68" target="_blank">捷運官網即時網頁</a>。<br>
-                    2. 在網頁任意空白處點擊滑鼠右鍵 ➡️ 選擇 <b>「檢查」 (Inspect)</b> 或按 <b>F12</b> 開啟工程師面板。<br>
-                    3. 切換到上方分頁的 <b>「網路」 (Network)</b>，並在下方小篩選列點選 <b>「Fetch/XHR」</b>。<br>
-                    4. 按 <b>F5 重新整理網頁</b>，你會看到下方瘋狂跳出連線紀錄。點擊那些紀錄，看右邊的「預覽 (Preview)」，找找看哪一條點開後長得像 <code>{"TrainNumber":...}</code> 或有看見車號站名。<br>
-                    5. 找到那條紀錄後，在它上面點滑鼠右鍵 ➡️ <b>Copy ➡️ Copy URL</b>。那串網址就是這座大樓真正的「地下水管」，把它貼進 Apps Script 的第二行，你的儀表板就永遠亮起來了！
-                </div>
-            `;
-            document.getElementById('listExhibition').innerHTML = '<div class="no-data">等待正確的 API 水管接通</div>';
-            document.getElementById('listZoo').innerHTML = '<div class="no-data">等待正確的 API 水管接通</div>';
+            errorConsole.innerHTML = `<b>錯誤提示：</b>${msg}<br><small>請檢查：1. 網址是否正確 2. Apps Script 部署權限是否設為『任何人』</small>`;
         }
 
         function renderTrainDashboard(trains) {
