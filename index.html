@@ -161,32 +161,34 @@
         .no-data { text-align: center; color: #aaa; padding: 30px 0; font-style: italic; }
         
         .error-msg {
-            color: #e66767;
-            background: #fff0f0;
-            padding: 12px;
-            border-radius: 6px;
-            border: 1px solid #ffcccc;
+            color: #2c3e50;
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ffeeba;
             margin: 15px auto 0 auto;
-            max-width: 750px;
-            font-size: 0.9rem;
+            max-width: 850px;
+            font-size: 0.95rem;
             display: none;
-            text-align: center;
+            text-align: left;
+            line-height: 1.6;
         }
+        .guide-box { margin-top: 10px; background: white; padding: 10px; border-radius: 4px; border: 1px dashed #aaa; }
     </style>
 </head>
 <body>
 
     <div class="dashboard-header">
-        <h1>🚊 文湖線列車動態監控儀表板 (雲端中繼版)</h1>
+        <h1>🚊 文湖線列車動態監控儀表板 (官網爬蟲版)</h1>
         <div class="status-container">
-            <span id="updateTime">正在透過 Google 轉接站讀取數據...</span>
+            <span id="updateTime">正在對捷運官網發動網頁爬蟲...</span>
             <span>|</span>
             <div>
                 <span>下次自動更新：</span>
                 <div class="timer-bar-container">
                     <div class="timer-bar" id="timerBar"></div>
                 </div>
-                <span id="countdownText">5:00</span>
+                <span id="countdownText">1:00</span>
             </div>
         </div>
         <div id="errorConsole" class="error-msg"></div>
@@ -204,7 +206,7 @@
                 <span class="train-count" id="countExhibition">0 班</span>
             </div>
             <div class="train-list" id="listExhibition">
-                <div class="no-data">資料載入中...</div>
+                <div class="no-data">等待爬蟲回傳...</div>
             </div>
         </div>
 
@@ -214,16 +216,15 @@
                 <span class="train-count" id="countZoo">0 班</span>
             </div>
             <div class="train-list" id="listZoo">
-                <div class="no-data">資料載入中...</div>
+                <div class="no-data">等待爬蟲回傳...</div>
             </div>
         </div>
     </div>
 
     <script>
-        // 已自動嵌入您專屬的 Google Apps Script 網頁應用程式網址
         const targetApi = "https://script.google.com/macros/s/AKfycbwsoJuaj_Ux4ioP0Z9uEpLbESjhTNoXLNyakeWrcJe1R1lfxoJsPZIuz6rDYZL8XwRx/exec"; 
 
-        const REFRESH_INTERVAL = 300; // 5分鐘 (300秒)
+        const REFRESH_INTERVAL = 60; // 🎯 降級為 1 分鐘更新一次
         let countdown = REFRESH_INTERVAL;
         let timerInterval = null;
         let cachedTrainData = []; 
@@ -245,8 +246,7 @@
             
             const mins = Math.floor(countdown / 60);
             const secs = countdown % 60;
-            const formattedTime = `${mins}:${secs.toString().padStart(2, '0')}`;
-            document.getElementById('countdownText').innerText = formattedTime;
+            document.getElementById('countdownText').innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
         }
 
         function manualRefresh() { fetchMetroData(); }
@@ -261,27 +261,47 @@
                 if (!response.ok) throw new Error(`HTTP 錯誤: ${response.status}`);
                 
                 const resData = await response.json();
-                if (resData.error) throw new Error(resData.error);
+                
+                if (resData.error) {
+                    if (resData.isShell) {
+                        showShellGuide(resData.error);
+                        timeStatus.innerHTML = "⚠️ 抵達官網，但資料被藏起來了";
+                        return;
+                    }
+                    throw new Error(resData.error);
+                }
 
                 cachedTrainData = resData.data || [];
                 renderTrainDashboard(cachedTrainData);
 
                 const now = new Date();
-                timeStatus.innerHTML = `✅ 經由 Google 轉接成功: ${now.toLocaleTimeString()}`;
+                timeStatus.innerHTML = `✅ 官網資料爬取成功: ${now.toLocaleTimeString()}`;
                 startCountdown();
 
             } catch (error) {
                 console.error(error);
-                handleError(error.message);
+                timeStatus.innerHTML = "<span style='color:#e66767;'>❌ 轉接站連線失敗</span>";
+                errorConsole.style.display = "block";
+                errorConsole.innerHTML = `<b>系統提示：</b>${error.message}`;
             }
         }
 
-        function handleError(msg) {
-            const timeStatus = document.getElementById('updateTime');
+        function showShellGuide(errMsg) {
             const errorConsole = document.getElementById('errorConsole');
-            timeStatus.innerHTML = "<span style='color:#e66767;'>❌ 轉接連線失敗</span>";
             errorConsole.style.display = "block";
-            errorConsole.innerHTML = `<b>系統提示：</b>${msg}<br>請檢查 Google Apps Script 部署時「誰有權存取」是否確實設定為「任何人」。`;
+            errorConsole.innerHTML = `
+                <b>⚠️ 爬蟲觸網提示：</b><br>${errMsg.replace('\n', '<br>')}
+                <div class="guide-box">
+                    <b>🕵️‍♂️ 30秒找出「隱藏資料傳輸線 (API)」教學：</b><br>
+                    1. 用電腦瀏覽器打開你給的 <a href="https://www.metro.taipei/cp.aspx?n=59D50DF212B82F6A&Create=1&s=380A51678612648A&ccms_cs=1&state=F5D336F102ACBC68" target="_blank">捷運官網即時網頁</a>。<br>
+                    2. 在網頁任意空白處點擊滑鼠右鍵 ➡️ 選擇 <b>「檢查」 (Inspect)</b> 或按 <b>F12</b> 開啟工程師面板。<br>
+                    3. 切換到上方分頁的 <b>「網路」 (Network)</b>，並在下方小篩選列點選 <b>「Fetch/XHR」</b>。<br>
+                    4. 按 <b>F5 重新整理網頁</b>，你會看到下方瘋狂跳出連線紀錄。點擊那些紀錄，看右邊的「預覽 (Preview)」，找找看哪一條點開後長得像 <code>{"TrainNumber":...}</code> 或有看見車號站名。<br>
+                    5. 找到那條紀錄後，在它上面點滑鼠右鍵 ➡️ <b>Copy ➡️ Copy URL</b>。那串網址就是這座大樓真正的「地下水管」，把它貼進 Apps Script 的第二行，你的儀表板就永遠亮起來了！
+                </div>
+            `;
+            document.getElementById('listExhibition').innerHTML = '<div class="no-data">等待正確的 API 水管接通</div>';
+            document.getElementById('listZoo').innerHTML = '<div class="no-data">等待正確的 API 水管接通</div>';
         }
 
         function renderTrainDashboard(trains) {
