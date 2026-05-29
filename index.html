@@ -177,16 +177,16 @@
 <body>
 
     <div class="dashboard-header">
-        <h1>🚊 文湖線列車動態監控儀表板 (雲端直連版)</h1>
+        <h1>🚊 文湖線列車動態監控儀表板 (雲端中繼版)</h1>
         <div class="status-container">
-            <span id="updateTime">正在與捷運行控中心連線...</span>
+            <span id="updateTime">正在透過 Google 轉接站讀取數據...</span>
             <span>|</span>
             <div>
                 <span>下次自動更新：</span>
                 <div class="timer-bar-container">
                     <div class="timer-bar" id="timerBar"></div>
                 </div>
-                <span id="countdownText">30s</span>
+                <span id="countdownText">5:00</span>
             </div>
         </div>
         <div id="errorConsole" class="error-msg"></div>
@@ -220,8 +220,10 @@
     </div>
 
     <script>
-        const targetApi = "https://tcgbusfs.blob.core.windows.net/metro/metro-pids-woodland.json"; 
-        const REFRESH_INTERVAL = 30; 
+        // 已自動嵌入您專屬的 Google Apps Script 網頁應用程式網址
+        const targetApi = "https://script.google.com/macros/s/AKfycbwsoJuaj_Ux4ioP0Z9uEpLbESjhTNoXLNyakeWrcJe1R1lfxoJsPZIuz6rDYZL8XwRx/exec"; 
+
+        const REFRESH_INTERVAL = 300; // 5分鐘 (300秒)
         let countdown = REFRESH_INTERVAL;
         let timerInterval = null;
         let cachedTrainData = []; 
@@ -240,7 +242,11 @@
         function updateTimerUI() {
             const percentage = (countdown / REFRESH_INTERVAL) * 100;
             document.getElementById('timerBar').style.width = `${percentage}%`;
-            document.getElementById('countdownText').innerText = `${countdown}s`;
+            
+            const mins = Math.floor(countdown / 60);
+            const secs = countdown % 60;
+            const formattedTime = `${mins}:${secs.toString().padStart(2, '0')}`;
+            document.getElementById('countdownText').innerText = formattedTime;
         }
 
         function manualRefresh() { fetchMetroData(); }
@@ -251,29 +257,31 @@
             errorConsole.style.display = "none"; 
 
             try {
-                // 加上時間戳防快取
-                const cacheBuster = `?_ts=${new Date().getTime()}`;
-                const response = await fetch(targetApi + cacheBuster);
-                
+                const response = await fetch(targetApi);
                 if (!response.ok) throw new Error(`HTTP 錯誤: ${response.status}`);
-                const resData = await response.json();
                 
+                const resData = await response.json();
+                if (resData.error) throw new Error(resData.error);
+
                 cachedTrainData = resData.data || [];
                 renderTrainDashboard(cachedTrainData);
 
                 const now = new Date();
-                timeStatus.innerHTML = `✅ 數據同步成功: ${now.toLocaleTimeString()}`;
+                timeStatus.innerHTML = `✅ 經由 Google 轉接成功: ${now.toLocaleTimeString()}`;
                 startCountdown();
 
             } catch (error) {
                 console.error(error);
-                timeStatus.innerHTML = "<span style='color:#e66767;'>❌ 雲端連線失敗</span>";
-                errorConsole.style.display = "block";
-                errorConsole.innerHTML = `
-                    <b>⚠️ 跨網域連線阻擋 (CORS)：</b>政府資料庫目前不允許從此網域直接讀取。<br>
-                    若上傳後仍看見此訊息，代表該 API 徹底封鎖了瀏覽器直連，建議改用「方法一 (Google 私人轉接站)」。
-                `;
+                handleError(error.message);
             }
+        }
+
+        function handleError(msg) {
+            const timeStatus = document.getElementById('updateTime');
+            const errorConsole = document.getElementById('errorConsole');
+            timeStatus.innerHTML = "<span style='color:#e66767;'>❌ 轉接連線失敗</span>";
+            errorConsole.style.display = "block";
+            errorConsole.innerHTML = `<b>系統提示：</b>${msg}<br>請檢查 Google Apps Script 部署時「誰有權存取」是否確實設定為「任何人」。`;
         }
 
         function renderTrainDashboard(trains) {
